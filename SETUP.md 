@@ -1,0 +1,88 @@
+# Configuración de Desarrollo
+
+## Configuración del entorno
+
+1. Clona el repositorio:
+   ```bash
+   git clone https://github.com/imartinezt/ci-cd.git
+   cd ci-cd
+   ```
+
+2. Crea un entorno virtual:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # En Windows: venv\Scripts\activate
+   ```
+
+3. Instala las dependencias:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. Instala las dependencias de desarrollo:
+   ```bash
+   pip install -r requirements-dev.txt
+   ```
+
+## Configuración de pre-commit
+
+Pre-commit ejecuta checks automáticos antes de cada commit para asegurar la calidad del código.
+
+1. Instala pre-commit:
+   ```bash
+   pip install pre-commit
+   ```
+
+2. Configura los hooks de pre-commit:
+   ```bash
+   pre-commit install
+   pre-commit install --hook-type commit-msg
+   ```
+
+3. Ejecuta pre-commit en todos los archivos (primera vez):
+   ```bash
+   pre-commit run --all-files
+   ```
+
+## Ejecución local
+
+1. Ejecuta la aplicación:
+   ```bash
+   uvicorn app:app --reload
+   ```
+
+2. Accede a la API:
+   - API principal: http://localhost:8000/
+   - Documentación: http://localhost:8000/docs
+
+## Pruebas
+
+Ejecuta las pruebas con pytest:
+```bash
+pytest
+```
+
+## CI/CD
+
+El pipeline de CI/CD se ejecuta automáticamente en GitHub Actions cuando:
+- Se hace push a la rama `main`
+- Se crea un Pull Request a la rama `main`
+
+El proceso incluye:
+1. Linting y verificación de formato
+2. Ejecución de pruebas y generación de reporte de cobertura
+3. Construcción y publicación de imagen Docker
+4. Despliegue en Google Cloud Run (solo en rama main)
+
+## Estructura de Commits
+
+Utilizamos Conventional Commits para el formato de mensajes. Ejemplos:
+
+- `feat: agregar endpoint de autenticación`
+- `fix: corregir error en validación de datos`
+- `docs: actualizar README`
+- `chore: actualizar dependencias`
+- `refactor: reorganizar código de endpoint principal`
+- `test: agregar pruebas para nuevas funcionalidades`
+
+Más información: [Conventional Commits](https://www.conventionalcommits.org/)
