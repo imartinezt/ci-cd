@@ -1,4 +1,4 @@
-# Workflow usando tus credenciales personales (que funcionan)
+# Workflow usando cloudbuild.yaml (como el proyecto exitoso de tu amigo)
 name: CI/CD Pipeline para Hello-World FastAPI
 
 on:
@@ -75,76 +75,34 @@ jobs:
     - name: Checkout repository code
       uses: actions/checkout@v3
     
-    # Usar tus credenciales personales en lugar de service account
     - id: 'auth'
-      name: 'Authenticate to Google Cloud with User Credentials'
+      name: 'Authenticate to Google Cloud'
       uses: 'google-github-actions/auth@v1'
       with:
-        # En lugar de service account JSON, usar tu JSON personal
-        credentials_json: '${{ secrets.GCP_USER_CREDENTIALS }}' 
-        # O alternativamente usar token:
-        # token_format: 'access_token'
-        # access_token_lifetime: '300s'
+        credentials_json: '${{ secrets.SA_MLCATALOGDEV }}' 
     
     - name: 'Set up Google Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v1'
       with:
         project_id: crp-dev-dig-mlcatalog 
         
-    # Configurar Docker para usar gcloud como credencial helper
-    - name: 'Configure Docker for Artifact Registry'
-      run: |
-        gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
-        
-    # Build con Docker local
-    - name: 'Build and Push Image with Docker'
+    # Usar cloudbuild.yaml como el proyecto exitoso de tu amigo
+    - name: 'Build and Deploy with cloudbuild.yaml (como tu amigo)'
       run: |
         set -e 
         
+        # Obtener SHORT_SHA para versioning
         SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
         
-        IMAGE_NAME="hello-world-fastapi"
-        PROJECT_ID="crp-dev-dig-mlcatalog"
-        REGION="us-central1"
-        REGISTRY_NAME="cicd"
+        echo "Using cloudbuild.yaml approach (same as your friend's working project)"
+        echo "Building and deploying with SHORT_SHA: $SHORT_SHA"
         
-        IMAGE_FULL_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REGISTRY_NAME}/${IMAGE_NAME}"
-        TAG_VERSION="${IMAGE_FULL_PATH}:${SHORT_SHA}"
-        TAG_LATEST="${IMAGE_FULL_PATH}:latest"
+        # Usar gcloud builds submit con cloudbuild.yaml (NO con --tag)
+        # Esto es exactamente como funciona el proyecto de tu amigo
+        gcloud builds submit . \
+          --config=cloudbuild.yaml \
+          --substitutions=SHORT_SHA=$SHORT_SHA \
+          --project=crp-dev-dig-mlcatalog \
+          --timeout=10m
         
-        echo "Building image locally with user credentials..."
-        docker buildx build --platform linux/amd64 -t $TAG_VERSION -t $TAG_LATEST .
-        
-        echo "Pushing images to Artifact Registry..."
-        docker push $TAG_VERSION
-        docker push $TAG_LATEST
-
-        echo "IMAGE_TAG=$TAG_VERSION" >> $GITHUB_ENV
-    
-    # Deploy con tus permisos (que funcionan)
-    - name: 'Deploy to Cloud Run'
-      run: |
-        set -e 
-        
-        SERVICE_NAME="fastapi-hello-world-service"
-        PROJECT_ID="crp-dev-dig-mlcatalog"
-        REGION="us-central1"
-        
-        echo "Deploying with user credentials (same as your local script)..."
-        
-        gcloud run deploy $SERVICE_NAME \
-          --image=${{ env.IMAGE_TAG }} \
-          --region=$REGION \
-          --platform=managed \
-          --port=9819 \
-          --cpu=4 \
-          --memory=16Gi \
-          --min-instances=1 \
-          --max-instances=50 \
-          --timeout=3600s \
-          --concurrency=80 \
-          --execution-environment=gen2 \
-          --project=$PROJECT_ID \
-          --no-allow-unauthenticated
-        
-        echo "Deployed version ${{ env.IMAGE_TAG }} to $SERVICE_NAME"
+        echo "Build and deploy completed successfully using cloudbuild.yaml!"
