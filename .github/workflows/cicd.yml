@@ -1,4 +1,4 @@
-# Workflow definitivo con Docker Local (sin necesidad de permisos extra)
+# Workflow usando tus credenciales personales (que funcionan)
 name: CI/CD Pipeline para Hello-World FastAPI
 
 on:
@@ -75,11 +75,16 @@ jobs:
     - name: Checkout repository code
       uses: actions/checkout@v3
     
+    # Usar tus credenciales personales en lugar de service account
     - id: 'auth'
-      name: 'Authenticate to Google Cloud'
+      name: 'Authenticate to Google Cloud with User Credentials'
       uses: 'google-github-actions/auth@v1'
       with:
-        credentials_json: '${{ secrets.SA_MLCATALOGDEV }}' 
+        # En lugar de service account JSON, usar tu JSON personal
+        credentials_json: '${{ secrets.GCP_USER_CREDENTIALS }}' 
+        # O alternativamente usar token:
+        # token_format: 'access_token'
+        # access_token_lifetime: '300s'
     
     - name: 'Set up Google Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v1'
@@ -91,8 +96,8 @@ jobs:
       run: |
         gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
         
-    # Paso para construir la imagen Docker localmente y subirla (igual que tu build.sh)
-    - name: 'Build and Push Image with Docker (como tu build.sh que funciona)'
+    # Build con Docker local
+    - name: 'Build and Push Image with Docker'
       run: |
         set -e 
         
@@ -107,9 +112,7 @@ jobs:
         TAG_VERSION="${IMAGE_FULL_PATH}:${SHORT_SHA}"
         TAG_LATEST="${IMAGE_FULL_PATH}:latest"
         
-        echo "Building image locally (exactamente como tu build.sh)..."
-        
-        # Mismo comando que en tu build.sh que funciona
+        echo "Building image locally with user credentials..."
         docker buildx build --platform linux/amd64 -t $TAG_VERSION -t $TAG_LATEST .
         
         echo "Pushing images to Artifact Registry..."
@@ -118,7 +121,7 @@ jobs:
 
         echo "IMAGE_TAG=$TAG_VERSION" >> $GITHUB_ENV
     
-    # Deploy a Cloud Run con los permisos actuales
+    # Deploy con tus permisos (que funcionan)
     - name: 'Deploy to Cloud Run'
       run: |
         set -e 
@@ -127,20 +130,21 @@ jobs:
         PROJECT_ID="crp-dev-dig-mlcatalog"
         REGION="us-central1"
         
-        echo "Deploying service $SERVICE_NAME with image ${{ env.IMAGE_TAG }} to Cloud Run in $REGION..."
+        echo "Deploying with user credentials (same as your local script)..."
         
-        # Probar primero si puede hacer deploy básico
         gcloud run deploy $SERVICE_NAME \
           --image=${{ env.IMAGE_TAG }} \
           --region=$REGION \
           --platform=managed \
           --port=9819 \
+          --cpu=4 \
+          --memory=16Gi \
+          --min-instances=1 \
+          --max-instances=50 \
+          --timeout=3600s \
+          --concurrency=80 \
+          --execution-environment=gen2 \
           --project=$PROJECT_ID \
-          --quiet || {
-          
-          echo "Deploy failed, trying with minimal permissions..."
-          echo "Es posible que necesites que un administrador otorgue permisos de Cloud Run"
-          exit 1
-        }
+          --no-allow-unauthenticated
         
         echo "Deployed version ${{ env.IMAGE_TAG }} to $SERVICE_NAME"
