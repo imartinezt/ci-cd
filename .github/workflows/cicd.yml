@@ -65,52 +65,48 @@ jobs:
     name: Build and Deploy
     needs: test
     runs-on: ubuntu-latest
-    
+    environment: ci-cd
+
     steps:
     - uses: actions/checkout@v3
-    
+
     - id: 'auth'
       name: 'Authenticate to Google Cloud'
       uses: 'google-github-actions/auth@v1'
       with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'
-    
+        credentials_json: '${{ secrets.SA_MLCATALOGDEV }}'
+
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v1'
-    
+
     - name: 'Configure Docker for GCP'
       run: |
         gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
-    
+
     - name: 'Build and Push Image'
       run: |
-        # Usar SHA corto del commit para versionar la imagen
         SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
-        
+
         IMAGE_NAME="hello-world-fastapi"
         PROJECT_ID="crp-dev-dig-mlcatalog"
         REGION="us-central1"
         REGISTRY_NAME="cicd"
         TAG_LATEST="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REGISTRY_NAME}/${IMAGE_NAME}:latest"
         TAG_VERSION="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REGISTRY_NAME}/${IMAGE_NAME}:${SHORT_SHA}"
-        
-        # Construir con el tag específico de versión y latest
+
         docker buildx build --platform linux/amd64 -t $TAG_VERSION -t $TAG_LATEST .
-        
-        # Subir ambas etiquetas
+
         docker push $TAG_VERSION
         docker push $TAG_LATEST
-        
-        # Guardar tag para usar en el siguiente paso
+
         echo "IMAGE_TAG=$TAG_VERSION" >> $GITHUB_ENV
-    
+
     - name: 'Deploy to Cloud Run'
       run: |
         SERVICE_NAME="fastapi-hello-world-service"
         PROJECT_ID="crp-dev-dig-mlcatalog"
         REGION="us-central1"
-        
-        # Usar la imagen con versión creada en el paso anterior
+
         gcloud run deploy $SERVICE_NAME \
           --image=${{ env.IMAGE_TAG }} \
           --region=$REGION \
@@ -125,5 +121,5 @@ jobs:
           --execution-environment=gen2 \
           --project=$PROJECT_ID \
           --no-allow-unauthenticated
-        
+
         echo "Deployed version ${{ env.IMAGE_TAG }} to $SERVICE_NAME"
