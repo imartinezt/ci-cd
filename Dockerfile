@@ -9,8 +9,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy all other files
 COPY . .
-COPY keys.json /app/keys.json
-COPY pro.json /app/pro.json
 
 # Expose the port
 EXPOSE 9819
