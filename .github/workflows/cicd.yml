@@ -97,12 +97,44 @@ jobs:
         echo "Using cloudbuild.yaml approach (same as your friend's working project)"
         echo "Building and deploying with SHORT_SHA: $SHORT_SHA"
         
-        # Usar gcloud builds submit con cloudbuild.yaml (NO con --tag)
-        # Esto es exactamente como funciona el proyecto de tu amigo
-        gcloud builds submit . \
+        # Usar gcloud builds submit con cloudbuild.yaml + async (evitar error de logs)
+        echo "Submitting build asynchronously to avoid log streaming issues..."
+        BUILD_ID=$(gcloud builds submit . \
           --config=cloudbuild.yaml \
           --substitutions=SHORT_SHA=$SHORT_SHA \
           --project=crp-dev-dig-mlcatalog \
-          --timeout=10m
+          --timeout=10m \
+          --async \
+          --format="value(id)")
+        
+        echo "Build submitted with ID: $BUILD_ID"
+        
+        # Polling manual para esperar a que termine el build (mismo approach que funcionó antes)
+        echo "Waiting for build to complete..."
+        BUILD_STATUS="WORKING"
+        COUNTER=0
+        MAX_ATTEMPTS=60  # 10 minutos máximo (60 * 10 segundos)
+        
+        while [ "$BUILD_STATUS" = "WORKING" ] || [ "$BUILD_STATUS" = "QUEUED" ]; do
+          sleep 10
+          BUILD_STATUS=$(gcloud builds describe $BUILD_ID --project=crp-dev-dig-mlcatalog --format="value(status)" 2>/dev/null || echo "WORKING")
+          COUNTER=$((COUNTER + 1))
+          echo "Build status: $BUILD_STATUS (attempt $COUNTER/$MAX_ATTEMPTS)"
+          
+          if [ $COUNTER -ge $MAX_ATTEMPTS ]; then
+            echo "Build timeout after 10 minutes"
+            exit 1
+          fi
+        done
+        
+        echo "Final build status: $BUILD_STATUS"
+        
+        if [ "$BUILD_STATUS" != "SUCCESS" ]; then
+          echo "Build failed with status: $BUILD_STATUS"
+          # Obtener logs del build si falló
+          echo "Getting build logs..."
+          gcloud builds log $BUILD_ID --project=crp-dev-dig-mlcatalog || true
+          exit 1
+        fi
         
         echo "Build and deploy completed successfully using cloudbuild.yaml!"
