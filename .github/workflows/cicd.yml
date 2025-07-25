@@ -1,125 +1,152 @@
-name: CI/CD Pipeline
+# Nombre del workflow de CI/CD
+name: CI/CD Pipeline para Hello-World FastAPI
 
+# Eventos que disparan el workflow
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main # Se ejecuta cuando se suben cambios a la rama 'main'
   pull_request:
-    branches: [ main ]
+    branches:
+      - main # Se ejecuta cuando se crea un Pull Request contra la rama 'main'
 
+# Definición de los jobs (tareas) del pipeline
 jobs:
+  # Job para el análisis de código (Linting)
   lint:
     name: Lint Code
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest # Se ejecuta en un runner de Ubuntu
     
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout repository code
+      uses: actions/checkout@v3 # Descarga el código del repositorio
     
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4 # Configura el entorno Python
       with:
-        python-version: '3.11'
+        python-version: '3.11' # Versión de Python a usar
         
-    - name: Install dependencies
+    - name: Install dependencies for linting
       run: |
-        python -m pip install --upgrade pip
-        pip install flake8 black isort
-        pip install -r requirements.txt
+        python -m pip install --upgrade pip # Actualiza pip
+        pip install flake8 black isort # Instala herramientas de linting y formateo
+        pip install -r requirements.txt # Instala las dependencias del proyecto
         
-    - name: Lint with flake8
+    - name: Run Flake8 linter
       run: |
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
         
-    - name: Check formatting with black
+    - name: Check code formatting with Black
       run: |
-        black --check .
+        black --check . # Verifica que el código cumpla con el formato de Black
         
-    - name: Check imports with isort
+    - name: Check import order with Isort
       run: |
-        isort --check-only --profile black .
+        isort --check-only --profile black . # Verifica el orden de las importaciones
 
+  # Job para ejecutar pruebas unitarias
   test:
-    name: Test
-    runs-on: ubuntu-latest
-    needs: lint
+    name: Run Tests
+    runs-on: ubuntu-latest # Se ejecuta en un runner de Ubuntu
+    needs: lint # Este job depende del job 'lint', solo se ejecuta si 'lint' es exitoso
     
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout repository code
+      uses: actions/checkout@v3 # Descarga el código del repositorio
     
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4 # Configura el entorno Python
       with:
         python-version: '3.11'
         
-    - name: Install dependencies
+    - name: Install dependencies for testing
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest pytest-cov
+        pip install -r requirements.txt # Instala las dependencias del proyecto
+        pip install pytest pytest-cov # Instala herramientas de testing
         
-    - name: Run tests
+    - name: Run Pytest tests
       run: |
-        pytest
+        pytest # Ejecuta las pruebas unitarias
 
+  # Job para construir la imagen Docker y desplegar en Google Cloud Run
   build-and-deploy:
-    name: Build and Deploy
-    needs: test
-    runs-on: ubuntu-latest
-    # IMPORTANTE: Especifica el ambiente para usar sus secretos
+    name: Build and Deploy to Cloud Run
+    needs: test # Este job depende del job 'test', solo se ejecuta si 'test' es exitoso
+    runs-on: ubuntu-latest # Se ejecuta en un runner de Ubuntu
+    
+    # IMPORTANTE: Asocia este job con tu ambiente de GitHub.
+    # Esto permite acceder a los secretos de ambiente como 'SA_MLCATALOGDEV'.
     environment: ci-cd 
     
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout repository code
+      uses: actions/checkout@v3 # Descarga el código del repositorio
     
     - id: 'auth'
       name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v1'
+      uses: 'google-github-actions/auth@v1' # Acción para autenticarse con GCP
       with:
-        # IMPORTANTE: Usa el nombre del secreto que tienes en tu ambiente 'ci-cd'
+        # Usa el nombre del secreto que creaste en tu ambiente 'ci-cd' en GitHub.
+        # Este secreto debe contener el JSON de la clave de tu cuenta de servicio.
         credentials_json: '${{ secrets.SA_MLCATALOGDEV }}' 
     
-    - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v1'
-    
-    - name: 'Configure Docker for GCP'
+    - name: 'Set up Google Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v1' # Configura gcloud CLI
+      with:
+        # Define explícitamente el ID de tu proyecto de GCP.
+        # Asegúrate de que 'crp-dev-dig-mlcatalog' sea tu PROJECT_ID correcto.
+        project_id: crp-dev-dig-mlcatalog 
+        
+    # Paso para construir y subir la imagen Docker usando Google Cloud Build
+    # Esto no requiere 'docker build' ni 'docker push' explícitos en el runner.
+    # Cloud Build manejará el proceso en GCP.
+    - name: 'Build and Push Image with Cloud Build'
       run: |
-        # Autentica Docker con Google Artifact Registry o Container Registry
-        # Asegúrate que la región y el tipo de registro (pkg.dev para Artifact Registry) sean correctos
-        gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
-    
-    - name: 'Build and Push Image'
-      run: |
-        # Usar SHA corto del commit para versionar la imagen
+        # Obtiene el SHA corto del commit actual para versionar la imagen.
         SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
         
+        # Define las variables de tu imagen y registro.
+        # Asegúrate que estas variables coincidan con tu configuración en GCP.
         IMAGE_NAME="hello-world-fastapi"
-        # Asegúrate que PROJECT_ID sea el ID de tu proyecto de GCP
-        PROJECT_ID="crp-dev-dig-mlcatalog" 
-        REGION="us-central1"
-        # REGISTRY_NAME es el nombre de tu repositorio en Artifact Registry (ej. 'cicd')
-        REGISTRY_NAME="cicd" 
+        PROJECT_ID="crp-dev-dig-mlcatalog" # Tu ID de proyecto de GCP
+        REGION="us-central1" # La región donde está tu Artifact Registry
+        REGISTRY_NAME="cicd" # El nombre de tu repositorio en Artifact Registry
         
-        TAG_LATEST="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REGISTRY_NAME}/${IMAGE_NAME}:latest"
-        TAG_VERSION="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REGISTRY_NAME}/${IMAGE_NAME}:${SHORT_SHA}"
+        # Construye la ruta completa de la imagen para el registro.
+        IMAGE_FULL_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REGISTRY_NAME}/${IMAGE_NAME}"
+        TAG_VERSION="${IMAGE_FULL_PATH}:${SHORT_SHA}" # Etiqueta con la versión del commit
+        TAG_LATEST="${IMAGE_FULL_PATH}:latest" # Etiqueta como 'latest'
         
-        # Construir la imagen Docker. --platform linux/amd64 es importante para compatibilidad con Cloud Run.
-        docker buildx build --platform linux/amd64 -t $TAG_VERSION -t $TAG_LATEST . --push
+        echo "Building and pushing image to $TAG_VERSION and $TAG_LATEST using Cloud Build..."
         
-        # docker buildx build con --push ya sube la imagen, no necesitas docker push aparte
-        # docker push $TAG_VERSION
-        # docker push $TAG_LATEST
-        
-        # Guardar tag para usar en el siguiente paso de despliegue
+        # Ejecuta gcloud builds submit para enviar el código a Cloud Build.
+        # Cloud Build leerá tu Dockerfile en el directorio actual (.).
+        # Las etiquetas (--tag) indican a Cloud Build dónde subir la imagen una vez construida.
+        gcloud builds submit . \
+          --tag=$TAG_VERSION \
+          --tag=$TAG_LATEST \
+          --project=$PROJECT_ID \
+          --timeout=10m # Tiempo máximo para el build (ajusta si tu build es largo)
+
+        # Guarda el tag de la versión en una variable de entorno de GitHub Actions
+        # para usarla en el siguiente paso (despliegue).
         echo "IMAGE_TAG=$TAG_VERSION" >> $GITHUB_ENV
     
+    # Paso para desplegar la imagen en Cloud Run
     - name: 'Deploy to Cloud Run'
       run: |
+        # Define las variables para el despliegue en Cloud Run.
+        # Asegúrate que estas variables coincidan con tu configuración deseada.
         SERVICE_NAME="fastapi-hello-world-service"
-        # Asegúrate que PROJECT_ID sea el ID de tu proyecto de GCP
-        PROJECT_ID="crp-dev-dig-mlcatalog" 
-        REGION="us-central1"
+        PROJECT_ID="crp-dev-dig-mlcatalog" # Tu ID de proyecto de GCP
+        REGION="us-central1" # La región donde quieres desplegar tu servicio Cloud Run
         
-        # Desplegar el servicio en Cloud Run
+        echo "Deploying service $SERVICE_NAME with image ${{ env.IMAGE_TAG }} to Cloud Run in $REGION..."
+        
+        # Ejecuta el comando de despliegue de Cloud Run.
+        # Usa la imagen que se acaba de construir y subir a Artifact Registry.
         gcloud run deploy $SERVICE_NAME \
           --image=${{ env.IMAGE_TAG }} \
           --region=$REGION \
@@ -133,6 +160,6 @@ jobs:
           --concurrency=80 \
           --execution-environment=gen2 \
           --project=$PROJECT_ID \
-          --no-allow-unauthenticated # Considera si quieres que sea accesible públicamente o no
+          --no-allow-unauthenticated # IMPORTANTE: Decide si tu servicio debe ser público (sí/no)
         
         echo "Deployed version ${{ env.IMAGE_TAG }} to $SERVICE_NAME"
