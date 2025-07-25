@@ -1,0 +1,50 @@
+# Google Cloud Build pipeline para Hello-World FastAPI
+steps:
+  # 1. Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'build', '-t',
+      'us-central1-docker.pkg.dev/$PROJECT_ID/cicd/hello-world-fastapi:${SHORT_SHA}',
+      '-t',
+      'us-central1-docker.pkg.dev/$PROJECT_ID/cicd/hello-world-fastapi:latest',
+      '.'
+    ]
+  
+  # 2. Push the Docker image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'push',
+      'us-central1-docker.pkg.dev/$PROJECT_ID/cicd/hello-world-fastapi:${SHORT_SHA}'
+    ]
+    
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'push', 
+      'us-central1-docker.pkg.dev/$PROJECT_ID/cicd/hello-world-fastapi:latest'
+    ]
+  
+  # 3. Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'Deploy to Cloud Run'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE}'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/cicd/hello-world-fastapi:${SHORT_SHA}'
+      - '--region=${_REGION}'
+      - '--platform=managed'
+      - '--port=9819'
+      - '--cpu=4'
+      - '--memory=16Gi'
+      - '--min-instances=1'
+      - '--max-instances=50'
+      - '--timeout=3600s'
+      - '--concurrency=80'
+      - '--execution-environment=gen2'
+      - '--no-allow-unauthenticated'
+
+# Variables de substitución (como tu amigo)
+substitutions:
+  _SERVICE: fastapi-hello-world-service
+  _REGION: us-central1
