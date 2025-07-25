@@ -34,7 +34,6 @@ jobs:
         
     - name: Run Flake8 linter
       run: |
-        # flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
         
     - name: Check code formatting with Black
@@ -95,20 +94,19 @@ jobs:
     - name: 'Set up Google Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v1' # Configura gcloud CLI
       with:
-        # Define explícitamente el ID de tu proyecto de GCP.
-        # Asegúrate de que 'crp-dev-dig-mlcatalog' sea tu PROJECT_ID correcto.
+        # Define explícitamente el ID de tu proyecto de GCP para todos los comandos gcloud.
         project_id: crp-dev-dig-mlcatalog 
         
     # Paso para construir y subir la imagen Docker usando Google Cloud Build
-    # Esto no requiere 'docker build' ni 'docker push' explícitos en el runner.
-    # Cloud Build manejará el proceso en GCP.
     - name: 'Build and Push Image with Cloud Build'
+      # Añadir 'set -e' para que el script falle inmediatamente si algún comando no es exitoso
       run: |
+        set -e 
+        
         # Obtiene el SHA corto del commit actual para versionar la imagen.
         SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
         
         # Define las variables de tu imagen y registro.
-        # Asegúrate que estas variables coincidan con tu configuración en GCP.
         IMAGE_NAME="hello-world-fastapi"
         PROJECT_ID="crp-dev-dig-mlcatalog" # Tu ID de proyecto de GCP
         REGION="us-central1" # La región donde está tu Artifact Registry
@@ -122,23 +120,22 @@ jobs:
         echo "Building and pushing image to $TAG_VERSION and $TAG_LATEST using Cloud Build..."
         
         # Ejecuta gcloud builds submit para enviar el código a Cloud Build.
-        # Cloud Build leerá tu Dockerfile en el directorio actual (.).
-        # Las etiquetas (--tag) indican a Cloud Build dónde subir la imagen una vez construida.
+        # Esto iniciará el build en GCP.
         gcloud builds submit . \
           --tag=$TAG_VERSION \
           --tag=$TAG_LATEST \
           --project=$PROJECT_ID \
-          --timeout=10m # Tiempo máximo para el build (ajusta si tu build es largo)
+          --timeout=10m 
 
         # Guarda el tag de la versión en una variable de entorno de GitHub Actions
-        # para usarla en el siguiente paso (despliegue).
         echo "IMAGE_TAG=$TAG_VERSION" >> $GITHUB_ENV
     
     # Paso para desplegar la imagen en Cloud Run
     - name: 'Deploy to Cloud Run'
+      # Añadir 'set -e' para que el script falle inmediatamente si algún comando no es exitoso
       run: |
-        # Define las variables para el despliegue en Cloud Run.
-        # Asegúrate que estas variables coincidan con tu configuración deseada.
+        set -e 
+        
         SERVICE_NAME="fastapi-hello-world-service"
         PROJECT_ID="crp-dev-dig-mlcatalog" # Tu ID de proyecto de GCP
         REGION="us-central1" # La región donde quieres desplegar tu servicio Cloud Run
@@ -146,7 +143,7 @@ jobs:
         echo "Deploying service $SERVICE_NAME with image ${{ env.IMAGE_TAG }} to Cloud Run in $REGION..."
         
         # Ejecuta el comando de despliegue de Cloud Run.
-        # Usa la imagen que se acaba de construir y subir a Artifact Registry.
+        # La imagen se toma de Artifact Registry.
         gcloud run deploy $SERVICE_NAME \
           --image=${{ env.IMAGE_TAG }} \
           --region=$REGION \
@@ -160,6 +157,6 @@ jobs:
           --concurrency=80 \
           --execution-environment=gen2 \
           --project=$PROJECT_ID \
-          --no-allow-unauthenticated # IMPORTANTE: Decide si tu servicio debe ser público (sí/no)
+          --no-allow-unauthenticated # Revisa si tu servicio debe ser público o no.
         
         echo "Deployed version ${{ env.IMAGE_TAG }} to $SERVICE_NAME"
