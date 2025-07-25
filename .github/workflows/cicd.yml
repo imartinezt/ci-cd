@@ -115,17 +115,30 @@ jobs:
         
         echo "Build submitted with ID: $BUILD_ID"
         
-        # Esperar a que termine el build y obtener el estado
+        # Polling manual para esperar a que termine el build
         echo "Waiting for build to complete..."
-        gcloud builds wait $BUILD_ID --project=$PROJECT_ID
+        BUILD_STATUS="WORKING"
+        COUNTER=0
+        MAX_ATTEMPTS=60  # 10 minutos máximo (60 * 10 segundos)
         
-        # Verificar el estado final
-        BUILD_STATUS=$(gcloud builds describe $BUILD_ID --project=$PROJECT_ID --format="value(status)")
-        echo "Build status: $BUILD_STATUS"
+        while [ "$BUILD_STATUS" = "WORKING" ] || [ "$BUILD_STATUS" = "QUEUED" ]; do
+          sleep 10
+          BUILD_STATUS=$(gcloud builds describe $BUILD_ID --project=$PROJECT_ID --format="value(status)" 2>/dev/null || echo "WORKING")
+          COUNTER=$((COUNTER + 1))
+          echo "Build status: $BUILD_STATUS (attempt $COUNTER/$MAX_ATTEMPTS)"
+          
+          if [ $COUNTER -ge $MAX_ATTEMPTS ]; then
+            echo "Build timeout after 10 minutes"
+            exit 1
+          fi
+        done
+        
+        echo "Final build status: $BUILD_STATUS"
         
         if [ "$BUILD_STATUS" != "SUCCESS" ]; then
           echo "Build failed with status: $BUILD_STATUS"
           # Obtener logs del build si falló
+          echo "Getting build logs..."
           gcloud builds log $BUILD_ID --project=$PROJECT_ID || true
           exit 1
         fi
