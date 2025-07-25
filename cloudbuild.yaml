@@ -1,4 +1,5 @@
 # Google Cloud Build pipeline para Hello-World FastAPI
+# Inspirado en el proyecto exitoso de tu amigo
 steps:
   # 1. Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
@@ -9,20 +10,20 @@ steps:
       'us-central1-docker.pkg.dev/$PROJECT_ID/cicd/hello-world-fastapi:latest',
       '.'
     ]
-  
+
   # 2. Push the Docker image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     args: [
       'push',
       'us-central1-docker.pkg.dev/$PROJECT_ID/cicd/hello-world-fastapi:${SHORT_SHA}'
     ]
-    
+
   - name: 'gcr.io/cloud-builders/docker'
     args: [
-      'push', 
+      'push',
       'us-central1-docker.pkg.dev/$PROJECT_ID/cicd/hello-world-fastapi:latest'
     ]
-  
+
   # 3. Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'Deploy to Cloud Run'
