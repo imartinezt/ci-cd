@@ -65,6 +65,8 @@ jobs:
     name: Build and Deploy
     needs: test
     runs-on: ubuntu-latest
+    # IMPORTANTE: Especifica el ambiente para usar sus secretos
+    environment: ci-cd 
     
     steps:
     - uses: actions/checkout@v3
@@ -73,13 +75,16 @@ jobs:
       name: 'Authenticate to Google Cloud'
       uses: 'google-github-actions/auth@v1'
       with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+        # IMPORTANTE: Usa el nombre del secreto que tienes en tu ambiente 'ci-cd'
+        credentials_json: '${{ secrets.SA_MLCATALOGDEV }}' 
     
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v1'
     
     - name: 'Configure Docker for GCP'
       run: |
+        # Autentica Docker con Google Artifact Registry o Container Registry
+        # Asegúrate que la región y el tipo de registro (pkg.dev para Artifact Registry) sean correctos
         gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
     
     - name: 'Build and Push Image'
@@ -88,29 +93,33 @@ jobs:
         SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
         
         IMAGE_NAME="hello-world-fastapi"
-        PROJECT_ID="crp-dev-dig-mlcatalog"
+        # Asegúrate que PROJECT_ID sea el ID de tu proyecto de GCP
+        PROJECT_ID="crp-dev-dig-mlcatalog" 
         REGION="us-central1"
-        REGISTRY_NAME="cicd"
+        # REGISTRY_NAME es el nombre de tu repositorio en Artifact Registry (ej. 'cicd')
+        REGISTRY_NAME="cicd" 
+        
         TAG_LATEST="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REGISTRY_NAME}/${IMAGE_NAME}:latest"
         TAG_VERSION="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REGISTRY_NAME}/${IMAGE_NAME}:${SHORT_SHA}"
         
-        # Construir con el tag específico de versión y latest
-        docker buildx build --platform linux/amd64 -t $TAG_VERSION -t $TAG_LATEST .
+        # Construir la imagen Docker. --platform linux/amd64 es importante para compatibilidad con Cloud Run.
+        docker buildx build --platform linux/amd64 -t $TAG_VERSION -t $TAG_LATEST . --push
         
-        # Subir ambas etiquetas
-        docker push $TAG_VERSION
-        docker push $TAG_LATEST
+        # docker buildx build con --push ya sube la imagen, no necesitas docker push aparte
+        # docker push $TAG_VERSION
+        # docker push $TAG_LATEST
         
-        # Guardar tag para usar en el siguiente paso
+        # Guardar tag para usar en el siguiente paso de despliegue
         echo "IMAGE_TAG=$TAG_VERSION" >> $GITHUB_ENV
     
     - name: 'Deploy to Cloud Run'
       run: |
         SERVICE_NAME="fastapi-hello-world-service"
-        PROJECT_ID="crp-dev-dig-mlcatalog"
+        # Asegúrate que PROJECT_ID sea el ID de tu proyecto de GCP
+        PROJECT_ID="crp-dev-dig-mlcatalog" 
         REGION="us-central1"
         
-        # Usar la imagen con versión creada en el paso anterior
+        # Desplegar el servicio en Cloud Run
         gcloud run deploy $SERVICE_NAME \
           --image=${{ env.IMAGE_TAG }} \
           --region=$REGION \
@@ -124,6 +133,6 @@ jobs:
           --concurrency=80 \
           --execution-environment=gen2 \
           --project=$PROJECT_ID \
-          --no-allow-unauthenticated
+          --no-allow-unauthenticated # Considera si quieres que sea accesible públicamente o no
         
         echo "Deployed version ${{ env.IMAGE_TAG }} to $SERVICE_NAME"
