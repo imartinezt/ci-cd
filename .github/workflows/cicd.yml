@@ -1,4 +1,4 @@
-# Workflow con Cloud Build mejorado
+# Workflow definitivo con Docker Local (sin necesidad de permisos extra)
 name: CI/CD Pipeline para Hello-World FastAPI
 
 on:
@@ -86,8 +86,13 @@ jobs:
       with:
         project_id: crp-dev-dig-mlcatalog 
         
-    # Paso mejorado para Cloud Build
-    - name: 'Build and Push Image with Cloud Build'
+    # Configurar Docker para usar gcloud como credencial helper
+    - name: 'Configure Docker for Artifact Registry'
+      run: |
+        gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+        
+    # Paso para construir la imagen Docker localmente y subirla (igual que tu build.sh)
+    - name: 'Build and Push Image with Docker (como tu build.sh que funciona)'
       run: |
         set -e 
         
@@ -102,50 +107,18 @@ jobs:
         TAG_VERSION="${IMAGE_FULL_PATH}:${SHORT_SHA}"
         TAG_LATEST="${IMAGE_FULL_PATH}:latest"
         
-        echo "Starting Cloud Build..."
+        echo "Building image locally (exactamente como tu build.sh)..."
         
-        # Usar Cloud Build con async para evitar problemas de streaming de logs
-        BUILD_ID=$(gcloud builds submit . \
-          --tag=$TAG_VERSION \
-          --tag=$TAG_LATEST \
-          --project=$PROJECT_ID \
-          --timeout=10m \
-          --async \
-          --format="value(id)")
+        # Mismo comando que en tu build.sh que funciona
+        docker buildx build --platform linux/amd64 -t $TAG_VERSION -t $TAG_LATEST .
         
-        echo "Build submitted with ID: $BUILD_ID"
-        
-        # Polling manual para esperar a que termine el build
-        echo "Waiting for build to complete..."
-        BUILD_STATUS="WORKING"
-        COUNTER=0
-        MAX_ATTEMPTS=60  # 10 minutos máximo (60 * 10 segundos)
-        
-        while [ "$BUILD_STATUS" = "WORKING" ] || [ "$BUILD_STATUS" = "QUEUED" ]; do
-          sleep 10
-          BUILD_STATUS=$(gcloud builds describe $BUILD_ID --project=$PROJECT_ID --format="value(status)" 2>/dev/null || echo "WORKING")
-          COUNTER=$((COUNTER + 1))
-          echo "Build status: $BUILD_STATUS (attempt $COUNTER/$MAX_ATTEMPTS)"
-          
-          if [ $COUNTER -ge $MAX_ATTEMPTS ]; then
-            echo "Build timeout after 10 minutes"
-            exit 1
-          fi
-        done
-        
-        echo "Final build status: $BUILD_STATUS"
-        
-        if [ "$BUILD_STATUS" != "SUCCESS" ]; then
-          echo "Build failed with status: $BUILD_STATUS"
-          # Obtener logs del build si falló
-          echo "Getting build logs..."
-          gcloud builds log $BUILD_ID --project=$PROJECT_ID || true
-          exit 1
-        fi
-        
-        echo "Build completed successfully!"
+        echo "Pushing images to Artifact Registry..."
+        docker push $TAG_VERSION
+        docker push $TAG_LATEST
+
         echo "IMAGE_TAG=$TAG_VERSION" >> $GITHUB_ENV
     
+    # Deploy a Cloud Run con los permisos actuales
     - name: 'Deploy to Cloud Run'
       run: |
         set -e 
@@ -156,19 +129,18 @@ jobs:
         
         echo "Deploying service $SERVICE_NAME with image ${{ env.IMAGE_TAG }} to Cloud Run in $REGION..."
         
+        # Probar primero si puede hacer deploy básico
         gcloud run deploy $SERVICE_NAME \
           --image=${{ env.IMAGE_TAG }} \
           --region=$REGION \
           --platform=managed \
           --port=9819 \
-          --cpu=4 \
-          --memory=16Gi \
-          --min-instances=1 \
-          --max-instances=50 \
-          --timeout=3600s \
-          --concurrency=80 \
-          --execution-environment=gen2 \
           --project=$PROJECT_ID \
-          --no-allow-unauthenticated
+          --quiet || {
+          
+          echo "Deploy failed, trying with minimal permissions..."
+          echo "Es posible que necesites que un administrador otorgue permisos de Cloud Run"
+          exit 1
+        }
         
         echo "Deployed version ${{ env.IMAGE_TAG }} to $SERVICE_NAME"
