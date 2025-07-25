@@ -86,19 +86,19 @@ jobs:
     - name: 'Build and Push Image'
       run: |
         SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
-
         IMAGE_NAME="hello-world-fastapi"
         PROJECT_ID="crp-dev-dig-mlcatalog"
         REGION="us-central1"
         REGISTRY_NAME="cicd"
-        TAG_LATEST="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REGISTRY_NAME}/${IMAGE_NAME}:latest"
-        TAG_VERSION="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REGISTRY_NAME}/${IMAGE_NAME}:${SHORT_SHA}"
-
-        docker buildx build --platform linux/amd64 -t $TAG_VERSION -t $TAG_LATEST .
-
-        docker push $TAG_VERSION
-        docker push $TAG_LATEST
-
+        IMAGE_FULL_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REGISTRY_NAME}/${IMAGE_NAME}"
+        TAG_VERSION="${IMAGE_FULL_PATH}:${SHORT_SHA}"
+        TAG_LATEST="${IMAGE_FULL_PATH}:latest"
+        echo "Building and pushing image to $TAG_VERSION and $TAG_LATEST using Cloud Build..."
+        gcloud builds submit . \
+          --tag=$TAG_VERSION \
+          --tag=$TAG_LATEST \
+          --project=$PROJECT_ID \
+          --timeout=10m
         echo "IMAGE_TAG=$TAG_VERSION" >> $GITHUB_ENV
 
     - name: 'Deploy to Cloud Run'
