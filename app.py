@@ -43,7 +43,7 @@ async def health_check():
     return {"status": "healthy"}
 
 
-# Manejar el puerto dinámico en entornos como Cloud Run
+# Manejar el puerto dinámico en entornos como Cloud Run / AWZ Service and Azure
 if __name__ == "__main__":
     import uvicorn
 
